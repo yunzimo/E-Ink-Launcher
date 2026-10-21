@@ -27,6 +27,7 @@ import androidx.annotation.NonNull;
 import cn.modificator.launcher.ftpservice.FTPService;
 import cn.modificator.launcher.model.AppSortComparator;
 import cn.modificator.launcher.model.WifiControl;
+import cn.modificator.launcher.model.AdbUtils;
 
 /**
  * 设置页面 Fragment。
@@ -57,6 +58,8 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
   private TextView hideDivider;
   private TextView ftpAddr;
   private TextView ftpStatus;
+  private TextView adbStatus;
+  private TextView adbAddr;
   private TextView showStatusBar;
   private TextView showCustomIcon;
   private Config config;
@@ -86,6 +89,7 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
     initSpinners();
     initFontControl();
     updateFtpStatus();
+    updateAdbStatus();
   }
 
   // =========================================================================
@@ -101,6 +105,9 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
     rootView.findViewById(R.id.changeFontSize).setOnClickListener(this);
     rootView.findViewById(R.id.helpAbout).setOnClickListener(this);
     rootView.findViewById(R.id.menu_ftp).setOnClickListener(this);
+    rootView.findViewById(R.id.menu_adb).setOnClickListener(this);
+    adbStatus = rootView.findViewById(R.id.adb_status);
+    adbAddr = rootView.findViewById(R.id.adb_addr);
     rootView.findViewById(R.id.openDeviceManager).setOnClickListener(this);
 
     showStatusBar = rootView.findViewById(R.id.showStatusBar);
@@ -243,6 +250,8 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
       handleToggleDivider();
     } else if (id == R.id.menu_ftp) {
       handleFtp();
+    } else if (id == R.id.menu_adb) {
+      handleAdb();
     } else if (id == R.id.showWifiName) {
       handleShowWifiName();
     } else if (id == R.id.showCustomIcon) {
@@ -325,6 +334,7 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
   public void onResume() {
     super.onResume();
     updateFtpStatus();
+    updateAdbStatus();
 
     IntentFilter wifiFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
     Utils.registerReceiverCompat(getActivity(), wifiReceiver, wifiFilter);
@@ -388,6 +398,60 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
   // 广播接收器
   // =========================================================================
 
+
+  private void handleAdb() {
+    new Thread(new Runnable() {
+      @Override
+      public void run() {
+        boolean isRunning = AdbUtils.isAdbRunning();
+        final boolean success = AdbUtils.toggleAdbWifi(!isRunning);
+        try {
+          Thread.sleep(600);
+        } catch (InterruptedException ignored) {}
+        if (getActivity() != null) {
+          getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+              if (!success && !AdbUtils.isAdbRunning()) {
+                Toast.makeText(getActivity(), "开启失败，请确认是否已获取 Root 权限", Toast.LENGTH_SHORT).show();
+              }
+              updateAdbStatus();
+            }
+          });
+        }
+      }
+    }).start();
+  }
+
+  private void updateAdbStatus() {
+    new Thread(new Runnable() {
+      @Override
+      public void run() {
+        final boolean running = AdbUtils.isAdbRunning();
+        final String addr = (getActivity() != null) ? AdbUtils.getAdbAddress(getActivity()) : null;
+        if (getActivity() != null) {
+          getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+              if (running) {
+                adbStatus.setText("无线 ADB 调试 （开）");
+                if (addr != null) {
+                  adbAddr.setVisibility(View.VISIBLE);
+                  adbAddr.setText("电脑终端: adb connect " + addr);
+                } else {
+                  adbAddr.setVisibility(View.GONE);
+                }
+              } else {
+                adbStatus.setText("无线 ADB 调试 （关）");
+                adbAddr.setVisibility(View.GONE);
+              }
+            }
+          });
+        }
+      }
+    }).start();
+  }
+
   private final BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -397,6 +461,7 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
         stopFtpServer();
       }
       updateFtpStatus();
+    updateAdbStatus();
     }
   };
 
@@ -404,6 +469,7 @@ public class SettingFragment extends Fragment implements View.OnClickListener {
     @Override
     public void onReceive(Context context, Intent intent) {
       updateFtpStatus();
+    updateAdbStatus();
     }
   };
 }
